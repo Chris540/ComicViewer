@@ -8,10 +8,12 @@ N: 78, O: 79, P: 80, Q: 81, R: 82, S: 83, T: 84, U: 85, V: 86, W: 87, X: 88, Y: 
 EQUALS:187, ADD:107, UNDERSCORE:189, SUB:109};
 
 // Settings object
-var settings = {modeDisplay: 0, spread: 0, nextKey: 0, prevKey: 0, firstKey: 0, lastKey: 0, openKey: 0, settingKey: 0};
+var settings = {nextKey: 0, prevKey: 0, frstKey: 0, lastKey: 0, 
+                openKey: 0, settingKey: 0, helpKey: 0, gotoKey: 0, 
+                panReset: true, zoomReset: true};
 
 // Settings Array of keys
-var settingKeys = ["modeDisplay", "spread", "nextKey", "prevKey", "firstKey", "lastKey", "openKey", "settingKey"];
+var settingStrings = ["nextKey", "prevKey", "firstKey", "lastKey", "openKey", "settingKey", "helpKey", "gotoKey"];
 
 //--------------------------------------------------
 // Variables
@@ -25,9 +27,21 @@ var first = 0;
 var last = images.length;
 var displayMode = 0;
 var currentZoomLevel = 1;
+var loaded = false;
+var intcnt = 0;
 
 // Set the menu to be visible
 $('#menubar').show();
+
+// initilize settings on winow load
+window.onload = function () { 
+  init(); 
+}
+
+// Adapting the image size on window resize
+$(window).resize(function() {
+  drawPanel(curPanel);
+});
 
 //Generic error handler
 function errorHandler(e) {
@@ -37,7 +51,7 @@ function errorHandler(e) {
 
 // Generic Setting handler for the app
 function saveSettings() {
-  chrome.storage.local.set({'spread':display, 'displayMode': displayMode}, function() {
+  chrome.storage.local.set(settings, function() {
     message("saved");
   });
 }
@@ -48,6 +62,11 @@ function loadSettings() {
       settings[key] = result;
     });
   }
+}
+
+function resetSettings() {
+  if(settings.zoomReset) $('#image_display img').panzoom("resetZoom");
+  if(settings.panReset) $('#image_display img').panzoom("resetPan");
 }
 
 var ImageFile = function(file) {
@@ -77,7 +96,7 @@ function onInitFs(fs) {
   console.log('onInitFs done, new');
 }
 
-// Draf and droop contols
+// Drag and drop contols
 function dragOverHandler(e) {
   e.preventDefault();
 }
@@ -107,6 +126,7 @@ $('#openbtn').click(function(e) {
   openFile();
 });
 
+// Handler for the interface to opening files
 function openFile() {
   console.log("Choose file\n");
   var accepts = [{
@@ -173,6 +193,7 @@ function handleFile(file) {
           });
         unarchiver.addEventListener(bitjs.archive.UnarchiveEvent.Type.FINISH,
           function(e) {
+            loaded = true;
             console.log("Done Extracting, Begin Saving");
           });
         unarchiver.start();
@@ -184,7 +205,7 @@ function handleFile(file) {
   }
 }
 
-
+// Creates the src for the images  in the comic viewer
 var createURLFromArray = function(array, mimeType) {
   var offset = array.byteOffset, len = array.byteLength;
   var bb, url;
@@ -226,40 +247,40 @@ var createURLFromArray = function(array, mimeType) {
 
 }*/
 
-// Gallary controls
+// Gallery controls
 $('#frstbtn').click(function(e) {
   e.preventDefault();
-  $('#image_display img').panzoom("resetZoom");
-  $('#image_display img').panzoom("resetPan");
   frstPanel();
 });
 
 $('#nextbtn').click(function(e) {
   e.preventDefault();
-  $('#image_display img').panzoom("resetZoom");
-  $('#image_display img').panzoom("resetPan");
   nextPanel();
 });
 
 $('#prevbtn').click(function(e) {
   e.preventDefault();
-  $('#image_display img').panzoom("resetZoom");
-  $('#image_display img').panzoom("resetPan");
   prevPanel();
 });
 
 $('#lastbtn').click(function(e) {
   e.preventDefault();
-  $('#image_display img').panzoom("resetZoom");
-  $('#image_display img').panzoom("resetPan");
   lastPanel();
 });
 
+// Helpscreen toggle
 $('#helpbtn').click(function(e) {
   toggleHelp();
 });
 
+// Goto toggle
+$('#gotobtn').click(function(e) {
+  toggleGoto();
+});
+
+// Function to toggle the help screen
 function toggleHelp() {
+  // Toggle the helpscreen's visibility
   if($('#helpscreen').is(':hidden')) {
     $('#helpscreen').show();
   } else {
@@ -267,22 +288,73 @@ function toggleHelp() {
   }
 }
 
+function toggleGoto() {
+  // Only toggle goto if the book is fully loaded 
+  if (loaded) {
+    // Toggle the goto input's visibility
+    if($('#gotoscreen').is(':hidden')) {
+      $('#gotoscreen').show();
+      // Insert the input ui
+      $('#gotoscreen').html('<input class="pagenumber" type="number" id="pagenumber" min="1" max="' + last + '"" maxlength="' + last.toString().length + '"> of ' + last + '<button type="button" class="btn btn-default btn-sm" id="pagesubmit">Go</button>');
+      // Add function for the button 
+      $('#pagesubmit').click(function(e) {
+        // Get value 
+        var page = $('#pagenumber').val();
+        // Only accepts values between 1 and the last page
+        if(page < images.length && page > 0) {
+          drawPanel(parseInt(page) - 1);
+          toggleGoto();
+        } else {
+          // Flash red when the number us invalid
+          var intrv = setInterval(function(){
+            intcnt++;
+            $('#pagenumber').attr('disabled','disabled');
+            if (intcnt == 1) {
+              $('#pagenumber').css("background-color", "red");
+            } else if (intcnt == 2) {
+              $('#pagenumber').css("background-color", "white");
+            } else if (intcnt == 2) {
+              $('#pagenumber').css("background-color", "red");
+            } else {
+              $('#pagenumber').css("background-color", "white");
+              intcnt = 0;
+              $('#pagenumber').removeAttr('disabled');
+              clearInterval(intrv);
+            }
+          },250);
+        }
+      });
+    } else {
+      // Remove and unbind
+      $('#gotoscreen').hide();
+      $('#pagesubmit').unbind("click");
+    }
+  }
+}
+
+// Goto the last page 
 function lastPanel() {
+  resetSettings();
   if(curPanel != last - display) drawPanel(images.length - 1);
   console.log(curPanel);
 }
 
+// Goto to the previous page
 function prevPanel() {
+  resetSettings();
   if(curPanel > first) drawPanel(curPanel - display);
   console.log(curPanel);
 }
 
+// Goto to the first page 
 function frstPanel() {
+  resetSettings();
   if(curPanel != first) drawPanel(first);
   console.log(curPanel);
 }
 
 function nextPanel() {
+  resetSettings();
   if(curPanel+display < images.length) drawPanel(curPanel + display);
   console.log(curPanel);
 }
@@ -292,7 +364,7 @@ function zoomon() {
     $zoomIn    : $('#zoominbtn'),
     $zoomOut   : $('#zoomoutbtn'),
     $reset     : $("#resetbtn"),
-    maxScale   : 3,
+    maxScale   : 4,
   });
 }
 
@@ -325,7 +397,7 @@ function drawPanel(num) {
   });
 }
 
-// Handeler for keyboard controls 
+// Handler for keyboard controls 
 function keyHandler(evt) {
   var code = evt.keyCode;
   if (code == Key.O) {
@@ -339,6 +411,12 @@ function keyHandler(evt) {
       break;
     case Key.RIGHT:
       nextPanel();
+      break;
+    case Key.UP:
+      $('#image_display img').panzoom("pan", 0, 25, {relative: true});
+      break;
+    case Key.DOWN:
+      $('#image_display img').panzoom("pan", 0, -25, {relative: true});
       break;
     case Key.ADD:
       $('#zoominbtn').click();
@@ -367,6 +445,9 @@ function keyHandler(evt) {
     case Key.X:
       hideControls();
       break;
+    case Key.Q:
+      document.body.webkitRequestFullscreen();
+      break;
     default:
       console.log("KeyCode = " + code);
       break;
@@ -382,6 +463,7 @@ function reset() {
   curPanel = 0;
   first = 0;
   last = images.length;
+  loaded = false;
   drawPanel(curPanel);
   $('#frstbtn').click(null);
   $('#nextbtn').click(null);
@@ -397,12 +479,16 @@ function reset() {
 function hideControls() {
   if($('#menubar').is(":visible")) $('#menubar').hide();
   else $('#menubar').show();
+<<<<<<< HEAD
+}
+=======
 }
 
-// initilize settings on winow load
+// initialize settings on winow load
 window.onload = init();
 
 // Adapting the image size on window resize
 $(window).resize(function() {
   drawPanel(curPanel);
 });
+>>>>>>> b7d10ed5f24d241a028f4316d9759e324f6f1cba
